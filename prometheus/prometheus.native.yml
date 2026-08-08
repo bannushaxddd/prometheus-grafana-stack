@@ -1,0 +1,27 @@
+# Native Windows config (no Docker) — scrapes local Prometheus + app on localhost
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+  external_labels:
+    cluster: "native-windows"
+    env: "development"
+
+rule_files:
+  - rules/alerting.yml
+  - rules/recording.yml
+
+scrape_configs:
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels:
+          service: "prometheus"
+
+  - job_name: "app"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["localhost:3000"]
+        labels:
+          service: "monitored-app"
+          app: "demo-api"

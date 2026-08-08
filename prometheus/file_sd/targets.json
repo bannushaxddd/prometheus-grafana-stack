@@ -1,0 +1,10 @@
+[
+  {
+    "targets": ["app:3000"],
+    "labels": {
+      "job": "file-sd-app",
+      "env": "development",
+      "discovered": "file_sd"
+    }
+  }
+]

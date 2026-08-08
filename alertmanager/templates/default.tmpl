@@ -1,0 +1,29 @@
+{{ define "slack.title" }}
+[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}
+{{ end }}
+
+{{ define "slack.text" }}
+{{ range .Alerts }}
+*Severity:* {{ .Labels.severity }}
+*Summary:* {{ .Annotations.summary }}
+*Description:* {{ .Annotations.description }}
+*Instance:* {{ .Labels.instance }}
+{{ end }}
+{{ end }}
+
+{{ define "email.subject" }}
+[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }} ({{ .CommonLabels.severity }})
+{{ end }}
+
+{{ define "email.html" }}
+<html>
+<body>
+  <h2>{{ template "email.subject" . }}</h2>
+  {{ range .Alerts }}
+  <p><b>Summary:</b> {{ .Annotations.summary }}</p>
+  <p>{{ .Annotations.description }}</p>
+  <hr/>
+  {{ end }}
+</body>
+</html>
+{{ end }}

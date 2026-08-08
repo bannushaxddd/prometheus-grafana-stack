@@ -1,0 +1,27 @@
+# Optional overlay: add Caddy HTTPS reverse proxy for Grafana
+# Usage (on cloud VM with a domain):
+#   1. Edit caddy/Caddyfile with your domain
+#   2. Set GRAFANA_ROOT_URL=https://your.domain in .env
+#   3. Comment out grafana ports in docker-compose.yml (or leave both for testing)
+#   4. docker compose -f docker-compose.yml -f docker-compose.https.yml up -d
+
+services:
+  caddy:
+    image: caddy:2.9-alpine
+    container_name: caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - monitoring
+    restart: unless-stopped
+    depends_on:
+      - grafana
+
+volumes:
+  caddy_data:
+  caddy_config:

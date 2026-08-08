@@ -1,0 +1,320 @@
+# Comprehensive Monitoring Stack
+# Prometheus + Grafana + Exporters + Alertmanager + Loki + MySQL + MongoDB
+#
+# Start:  docker compose up -d --build
+# Login:  http://localhost:3001  (see .env for GRAFANA_ADMIN_USER / PASSWORD)
+
+services:
+  # ── Sample application with custom metrics ──────────────────────────
+  app:
+    build: ./app
+    container_name: monitored-app
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      MYSQL_HOST: mysql
+      MYSQL_USER: ${MYSQL_USER:-app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-AppMysql2024}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-demo}
+      MONGO_URI: mongodb://${MONGO_ROOT_USER:-root}:${MONGO_ROOT_PASSWORD:-RootMongo2024}@mongo:27017
+    networks:
+      - monitoring
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      mongo:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── Nginx reverse proxy ─────────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/html:/usr/share/nginx/html:ro
+    depends_on:
+      - app
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  # ── MySQL (demo database) ───────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-RootMysql2024}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-demo}
+      MYSQL_USER: ${MYSQL_USER:-app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-AppMysql2024}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - monitoring
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --performance-schema=ON
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-RootMysql2024}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ── MySQL Prometheus exporter ───────────────────────────────────────
+  mysqld-exporter:
+    image: prom/mysqld-exporter:v0.15.1
+    container_name: mysqld-exporter
+    ports:
+      - "9104:9104"
+    command:
+      - "--config.my-cnf=/etc/mysql/exporter.my.cnf"
+      - "--mysqld.address=mysql:3306"
+      - "--mysqld.username=exporter"
+    environment:
+      MYSQLD_EXPORTER_PASSWORD: ${MYSQL_EXPORTER_PASSWORD:-ExporterMysql2024}
+    volumes:
+      - ./mysql/exporter.my.cnf:/etc/mysql/exporter.my.cnf:ro
+    networks:
+      - monitoring
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  # ── MongoDB (demo database) ─────────────────────────────────────────
+  mongo:
+    image: mongo:7
+    container_name: mongo
+    ports:
+      # Host 27018 avoids clashing with a local MongoDB on 27017
+      - "27018:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-root}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-RootMongo2024}
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  # ── MongoDB Prometheus exporter ─────────────────────────────────────
+  mongodb-exporter:
+    image: percona/mongodb_exporter:0.40.0
+    container_name: mongodb-exporter
+    ports:
+      - "9216:9216"
+    command:
+      - --mongodb.uri=mongodb://${MONGO_ROOT_USER:-root}:${MONGO_ROOT_PASSWORD:-RootMongo2024}@mongo:27017/admin?authSource=admin
+      - --collect-all
+      - --compatible-mode
+    networks:
+      - monitoring
+    restart: unless-stopped
+    depends_on:
+      - mongo
+
+  # ── Prometheus ──────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    container_name: prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME:-15d}"
+      - "--storage.tsdb.retention.size=${PROMETHEUS_RETENTION_SIZE:-5GB}"
+      - "--web.enable-lifecycle"
+      - "--web.enable-admin-api"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
+      - ./prometheus/file_sd:/etc/prometheus/file_sd:ro
+      - prometheus_data:/prometheus
+    networks:
+      - monitoring
+    restart: unless-stopped
+    depends_on:
+      - app
+      - node-exporter
+      - nginx-exporter
+      - mysqld-exporter
+      - mongodb-exporter
+
+  # ── Grafana ─────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.5.2
+    container_name: grafana
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-AdminMonitor2024}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_ALLOW_ORG_CREATE: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_AUTH_BASIC_ENABLED: "true"
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_SECURITY_COOKIE_SECURE: "false"
+      GF_SECURITY_STRICT_TRANSPORT_SECURITY: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3001}
+      GF_SERVER_SERVE_FROM_SUB_PATH: "false"
+      GF_LOG_LEVEL: info
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_SNAPSHOTS_EXTERNAL_ENABLED: "false"
+      GF_INSTALL_PLUGINS: ""
+      GF_SMTP_ENABLED: "false"
+      GRAFANA_VIEWER_USER: ${GRAFANA_VIEWER_USER:-viewer}
+      GRAFANA_VIEWER_PASSWORD: ${GRAFANA_VIEWER_PASSWORD:-ViewerMonitor2024}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - monitoring
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+      - loki
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ── Node Exporter (system metrics) ──────────────────────────────────
+  node-exporter:
+    image: prom/node-exporter:v1.9.0
+    container_name: node-exporter
+    command:
+      - "--path.rootfs=/host"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+    ports:
+      - "9100:9100"
+    volumes:
+      - /:/host:ro
+    networks:
+      - monitoring
+    restart: unless-stopped
+    pid: host
+
+  # ── cAdvisor (container metrics) ────────────────────────────────────
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: cadvisor
+    ports:
+      - "8081:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - monitoring
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kmsg
+
+  # ── Nginx Prometheus Exporter ───────────────────────────────────────
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:1.4.1
+    container_name: nginx-exporter
+    command:
+      - "--nginx.scrape-uri=http://nginx:80/stub_status"
+    ports:
+      - "9113:9113"
+    networks:
+      - monitoring
+    restart: unless-stopped
+    depends_on:
+      - nginx
+
+  # ── Alert logger (always-on webhook sink so you can see alerts fire) ─
+  alert-logger:
+    build: ./alert-logger
+    container_name: alert-logger
+    ports:
+      - "9999:9999"
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  # ── Alertmanager ────────────────────────────────────────────────────
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    container_name: alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+      - "--web.external-url=http://localhost:9093"
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./alertmanager/templates:/etc/alertmanager/templates:ro
+      - alertmanager_data:/alertmanager
+    networks:
+      - monitoring
+    restart: unless-stopped
+    depends_on:
+      - alert-logger
+
+  # ── Loki (log aggregation) ──────────────────────────────────────────
+  loki:
+    image: grafana/loki:3.4.2
+    container_name: loki
+    command: -config.file=/etc/loki/loki-config.yml
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  # ── Promtail (ships logs to Loki) ───────────────────────────────────
+  promtail:
+    image: grafana/promtail:3.4.2
+    container_name: promtail
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - monitoring
+    restart: unless-stopped
+    depends_on:
+      - loki
+
+networks:
+  monitoring:
+    driver: bridge
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:
+  loki_data:
+  mysql_data:
+  mongo_data:

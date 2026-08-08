@@ -1,0 +1,57 @@
+groups:
+  # Recording rules pre-compute expensive queries for faster dashboards
+  - name: system_recording
+    interval: 30s
+    rules:
+      # CPU usage percent (1 - idle)
+      - record: instance:node_cpu_utilization:rate5m
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+
+      # Memory usage percent
+      - record: instance:node_memory_utilization:ratio
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100
+
+      # Disk usage percent by mountpoint
+      - record: instance:node_filesystem_utilization:ratio
+        expr: (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"})) * 100
+
+      # Network receive bytes/sec
+      - record: instance:node_network_receive_bytes:rate5m
+        expr: sum by(instance) (rate(node_network_receive_bytes_total{device!~"lo|veth.*|docker.*|br-.*"}[5m]))
+
+      # Network transmit bytes/sec
+      - record: instance:node_network_transmit_bytes:rate5m
+        expr: sum by(instance) (rate(node_network_transmit_bytes_total{device!~"lo|veth.*|docker.*|br-.*"}[5m]))
+
+  - name: application_recording
+    interval: 30s
+    rules:
+      # Request rate (req/s)
+      - record: job:http_requests:rate5m
+        expr: sum by(job, method, route) (rate(http_requests_total[5m]))
+
+      # Error rate percent
+      - record: job:http_errors:rate5m
+        expr: |
+          sum by(job) (rate(http_requests_total{status_code=~"5.."}[5m]))
+          /
+          sum by(job) (rate(http_requests_total[5m]))
+
+      # p50 / p95 / p99 latency
+      - record: job:http_request_duration:p50
+        expr: |
+          histogram_quantile(0.50,
+            sum by(job, le) (rate(http_request_duration_seconds_bucket[5m]))
+          )
+
+      - record: job:http_request_duration:p95
+        expr: |
+          histogram_quantile(0.95,
+            sum by(job, le) (rate(http_request_duration_seconds_bucket[5m]))
+          )
+
+      - record: job:http_request_duration:p99
+        expr: |
+          histogram_quantile(0.99,
+            sum by(job, le) (rate(http_request_duration_seconds_bucket[5m]))
+          )

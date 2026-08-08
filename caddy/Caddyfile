@@ -1,0 +1,16 @@
+# Replace monitor.example.com with your real domain before using HTTPS overlay.
+# DNS A record must point to this server. Ports 80 and 443 must be open.
+
+monitor.example.com {
+	encode gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	reverse_proxy grafana:3000
+}

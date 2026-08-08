@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Monitored Demo App</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; color: #e8eaed; background: #0f1419; }
+    body { max-width: 760px; margin: 3rem auto; padding: 0 1.5rem; }
+    h1 { color: #e6522c; }
+    a { color: #6cb6ff; }
+    .card { background: #1a2332; border-radius: 12px; padding: 1.25rem 1.5rem; margin: 1rem 0; }
+    code { background: #0d1117; padding: 0.15rem 0.4rem; border-radius: 4px; }
+    .creds { background: #0d1117; border-radius: 8px; padding: 1rem; line-height: 1.7; }
+    button {
+      background: #e6522c; color: white; border: none; padding: 0.6rem 1.2rem;
+      border-radius: 8px; cursor: pointer; font-size: 1rem; margin-right: 0.5rem; margin-top: 0.5rem;
+    }
+    button:hover { background: #c44524; }
+    #out { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <h1>Monitored Demo Application</h1>
+  <p>Nginx reverse proxy → Node.js API. Metrics scraped by Prometheus → visualized in Grafana.</p>
+
+  <div class="card">
+    <h2>Grafana login</h2>
+    <div class="creds">
+      <div>URL: <a href="http://localhost:3001" target="_blank">http://localhost:3001</a></div>
+      <div>Username: <code>admin</code></div>
+      <div>Password: <code>AdminMonitor2024</code></div>
+      <div style="margin-top:0.5rem;color:#9aa0a6;font-size:0.9rem;">(from <code>.env</code> — change there for production)</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Generate load</h2>
+    <p>Click to create traffic that appears on Grafana dashboards.</p>
+    <button onclick="createOrder()">Create order</button>
+    <button onclick="hitCache()">Hit cache</button>
+    <button onclick="hitSlow()">Slow request</button>
+    <button onclick="burst()">Burst 20 requests</button>
+    <pre id="out"></pre>
+  </div>
+
+  <div class="card">
+    <h2>Monitoring links</h2>
+    <ul>
+      <li><a href="http://localhost:3001" target="_blank">Grafana</a> — dashboards (login required)</li>
+      <li><a href="http://localhost:9090" target="_blank">Prometheus</a> — targets &amp; PromQL</li>
+      <li><a href="http://localhost:9090/targets" target="_blank">Prometheus targets</a></li>
+      <li><a href="http://localhost:9093" target="_blank">Alertmanager</a></li>
+      <li><a href="http://localhost:9999" target="_blank">Alert Logger</a> — fired alerts</li>
+      <li><a href="http://localhost:3000/metrics" target="_blank">App /metrics</a></li>
+    </ul>
+  </div>
+
+  <script>
+    const out = document.getElementById('out');
+    function log(msg) { out.textContent = typeof msg === 'string' ? msg : JSON.stringify(msg, null, 2); }
+
+    async function createOrder() {
+      const r = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: +(Math.random() * 150 + 10).toFixed(2) }),
+      });
+      log(await r.json());
+    }
+
+    async function hitCache() {
+      const r = await fetch('/api/cache');
+      log(await r.json());
+    }
+
+    async function hitSlow() {
+      log('Waiting for slow endpoint...');
+      const r = await fetch('/api/slow');
+      log(await r.json());
+    }
+
+    async function burst() {
+      log('Sending 20 requests...');
+      const results = await Promise.all(
+        Array.from({ length: 20 }, () =>
+          fetch('/api/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount: +(Math.random() * 100 + 5).toFixed(2) }),
+          }).then((r) => r.status)
+        )
+      );
+      log({ statuses: results });
+    }
+  </script>
+</body>
+</html>
