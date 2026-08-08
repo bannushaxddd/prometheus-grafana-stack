@@ -4,14 +4,21 @@ Full infrastructure monitoring: **Prometheus**, **Grafana**, **Alertmanager**, *
 
 ## Live demo (Render, free tier)
 
-**Demo API with custom Prometheus metrics**: https://prometheus-grafana-stack-1.onrender.com/
+All five blueprint services are live — full loop: demo app → Prometheus scraping → Grafana dashboards.
 
-- `/` — demo UI · `/metrics` — Prometheus metrics · `/health` — health check
-- `POST /api/orders` creates orders (watch counters grow), `/api/slow` simulates latency
-- Free tier spins down after ~15 min idle — the first visit after a pause takes ~15–30 s to wake up
+| Service | URL | Login |
+|---|---|---|
+| Demo app | https://monitoring-app-9qo8.onrender.com | — |
+| Grafana | https://monitoring-grafana-h0hf.onrender.com | `admin` / `AdminMonitor2024` |
+| Prometheus | https://monitoring-prometheus-p60c.onrender.com | — |
+| Alertmanager | https://monitoring-alertmanager.onrender.com | — |
+| Alert logger | https://monitoring-alert-logger.onrender.com | — |
 
-The full Render blueprint ([`render.yaml`](./render.yaml)) also deploys Grafana, Prometheus,
-Alertmanager and the alert logger — see **Deploy on Render** below.
+Try: `POST /api/orders` on the demo app, then watch the counters in Grafana → **Monitoring** →
+**Application Metrics**.
+
+Free tier: services spin down after ~15 min idle — the first visit after a pause takes
+~15–30 s to wake up, and metrics reset on restart. See **Deploy on Render** below.
 
 ## Grafana login (default)
 
