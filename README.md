@@ -2,6 +2,17 @@
 
 Full infrastructure monitoring: **Prometheus**, **Grafana**, **Alertmanager**, **Loki**, **MySQL**, **MongoDB**, system/app exporters, and a demo Node.js app with custom metrics.
 
+## Live demo (Render, free tier)
+
+**Demo API with custom Prometheus metrics**: https://prometheus-grafana-stack-1.onrender.com/
+
+- `/` — demo UI · `/metrics` — Prometheus metrics · `/health` — health check
+- `POST /api/orders` creates orders (watch counters grow), `/api/slow` simulates latency
+- Free tier spins down after ~15 min idle — the first visit after a pause takes ~15–30 s to wake up
+
+The full Render blueprint ([`render.yaml`](./render.yaml)) also deploys Grafana, Prometheus,
+Alertmanager and the alert logger — see **Deploy on Render** below.
+
 ## Grafana login (default)
 
 | | |
@@ -29,6 +40,21 @@ cd D:\prometheus-3.13.1.windows-amd64
 3. Open http://localhost:3001 → login with `admin` / `AdminMonitor2024`
 4. Dashboards → **Monitoring** folder
 5. Generate traffic: `.\scripts\generate-load.ps1`
+
+---
+
+## Deploy on Render (free tier)
+
+1. Push this repo to GitHub, then in Render: **New + → Blueprint** → select this repo
+2. Render provisions 5 services from [`render.yaml`](./render.yaml): demo app, Prometheus,
+   Grafana, Alertmanager and alert-logger — each gets an `*.onrender.com` URL, cross-wired
+   via env vars
+3. Grafana: `admin` / `AdminMonitor2024` (change after first login)
+
+Free-tier limits: services spin down after ~15 min idle and there is no persistent disk
+(metrics reset on restart) — treat it as a live demo, not long-term storage. MySQL, MongoDB,
+exporters and Loki stay local (docker compose); see [`docs/01-CLOUD-DEPLOY.md`](./docs/01-CLOUD-DEPLOY.md)
+for a full always-on VM setup.
 
 ---
 
@@ -93,6 +119,7 @@ Details in [HOW_TO_USE.md](./HOW_TO_USE.md) Step 9.
 
 ```
 docker-compose.yml
+render.yaml / render/     # Render blueprint (free tier) per-service Dockerfiles
 .env / .env.example
 HOW_TO_USE.md
 app/                  # Node.js + custom Prometheus metrics
