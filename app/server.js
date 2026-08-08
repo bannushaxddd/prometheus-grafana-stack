@@ -6,6 +6,7 @@ const express = require('express');
 const client = require('prom-client');
 const morgan = require('morgan');
 const net = require('net');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -157,9 +158,14 @@ app.get('/health', async (_req, res) => {
 });
 
 app.get('/', (_req, res) => {
-  res.json({
-    name: 'monitored-demo-app',
-    endpoints: ['/health', '/api/orders', '/api/users', '/api/cache', '/api/slow', '/metrics'],
+  // Serve the demo UI when present in the image; fall back to the API index.
+  res.sendFile(path.join(__dirname, 'public', 'index.html'), (err) => {
+    if (err) {
+      res.json({
+        name: 'monitored-demo-app',
+        endpoints: ['/health', '/api/orders', '/api/users', '/api/cache', '/api/slow', '/metrics'],
+      });
+    }
   });
 });
 

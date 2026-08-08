@@ -6,6 +6,7 @@ COPY package.json ./
 RUN npm install --omit=dev
 
 COPY server.js ./
+COPY public/index.html ./public/index.html
 
 EXPOSE 3000
 
